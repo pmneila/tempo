@@ -158,5 +158,7 @@
   "exportFailure": "No se ha podido exportar esta secuencia. Inténtalo de nuevo.",
   "unexpectedError": "Se ha producido un error. Inténtalo de nuevo.",
   "sortable": "ordenable",
-  "intervalDescription": "Intervalo {{current}} de {{total}}: {{name}}"
+  "intervalDescription": "Intervalo {{current}} de {{total}}: {{name}}",
+  "timelineNavigation": "Navegación de la secuencia",
+  "jumpToInterval": "Ir a {{interval}}"
 }

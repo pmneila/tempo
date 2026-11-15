@@ -888,7 +888,11 @@ export default function App() {
                 format(Math.ceil(snapshot.remaining / 1000))
               )}
             </div>
-            <WorkoutTimeline steps={steps} snapshot={snapshot} />
+            <WorkoutTimeline
+              steps={steps}
+              snapshot={snapshot}
+              onSelect={(index) => control((e) => e.jump(index))}
+            />
             <div className="progress-label">
               <span>
                 {t("percentComplete", { percent: Math.round(progress) })}
@@ -903,17 +907,21 @@ export default function App() {
               <IconButton
                 label={t("previousSeries")}
                 disabled={
-                  completed || (engine.current?.seriesTarget(-1) ?? -1) < 0
+                  completed ||
+                  (engine.current?.previousTarget("series") ?? -1) < 0
                 }
-                onClick={() => control((e) => e.jump(e.seriesTarget(-1)))}
+                onClick={() => control((e) => e.back("series"))}
               >
                 <SkipBack size={23} />
                 <span aria-hidden="true">{t("seriesLabel", { count: 1 })}</span>
               </IconButton>
               <IconButton
                 label={t("previousInterval")}
-                disabled={completed || snapshot.index === 0}
-                onClick={() => control((e) => e.jump(e.index - 1))}
+                disabled={
+                  completed ||
+                  (engine.current?.previousTarget("interval") ?? -1) < 0
+                }
+                onClick={() => control((e) => e.back("interval"))}
               >
                 <ArrowLeft size={24} />
                 <span aria-hidden="true">

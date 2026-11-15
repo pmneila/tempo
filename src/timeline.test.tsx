@@ -146,3 +146,54 @@ describe("timeline presentation", () => {
     expect(html.match(/timeline-segment passed/g)).toHaveLength(6);
   });
 });
+
+describe("timeline selection controls", () => {
+  it("exposes one native button per occurrence with names, durations and rounds", () => {
+    const html = renderToStaticMarkup(
+      <WorkoutTimeline
+        steps={steps}
+        snapshot={{ ...paused, index: 3 }}
+        onSelect={() => {}}
+      />,
+    );
+    expect(html.match(/<button /g)).toHaveLength(steps.length);
+    expect(html).toContain(
+      'aria-label="Interval 2 of 6 · Go to Work · 00:30 · Strength · Round 1 of 2"',
+    );
+    expect(html).toContain(
+      'aria-label="Interval 4 of 6 · Go to Work · 00:30 · Strength · Round 2 of 2"',
+    );
+    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
+    expect(html).toContain("left:50%");
+    expect(html).toContain('role="group" aria-label="Timeline navigation"');
+    // Keep interactive controls outside progressbar, whose descendants are presentational.
+    expect(html).toContain('</svg></div><div class="timeline-targets"');
+  });
+  it("disables selection on completion while keeping full progress", () => {
+    const html = renderToStaticMarkup(
+      <WorkoutTimeline
+        steps={steps}
+        snapshot={{ index: 5, remaining: 0, status: "complete" }}
+        onSelect={() => {}}
+      />,
+    );
+    expect(html.match(/disabled=""/g)).toHaveLength(steps.length);
+    expect(html).toContain('aria-valuenow="100"');
+    expect(html).not.toContain('aria-current="step"');
+  });
+  it("handles empty and single-interval timelines without extra targets", () => {
+    const empty = renderToStaticMarkup(
+      <WorkoutTimeline steps={[]} snapshot={paused} onSelect={() => {}} />,
+    );
+    expect(empty).not.toContain("<button");
+    const one = renderToStaticMarkup(
+      <WorkoutTimeline
+        steps={[steps[0]]}
+        snapshot={paused}
+        onSelect={() => {}}
+      />,
+    );
+    expect(one.match(/<button /g)).toHaveLength(1);
+    expect(one).toContain("left:0%;width:100%");
+  });
+});

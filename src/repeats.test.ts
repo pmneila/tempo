@@ -92,6 +92,18 @@ describe("series rounds", () => {
     engine.jump(7);
     expect(engine.seriesTarget(-1)).toBe(1);
   });
+  it("restarts the whole series at round one before going to the previous block", () => {
+    const engine = new TimerEngine(flatten(blocks));
+    engine.jump(5);
+    expect(engine.steps[engine.index].round).toBe(3);
+    expect(engine.previousTarget("interval")).toBe(4);
+    expect(engine.previousTarget("series")).toBe(1);
+    engine.back("series");
+    expect(engine.steps[engine.index].round).toBe(1);
+    expect(engine.remaining).toBe(4000);
+    engine.back("series");
+    expect(engine.index).toBe(0);
+  });
   it("completes after every round and final standalone interval", () => {
     let now = 0;
     const engine = new TimerEngine(flatten(blocks), () => now);

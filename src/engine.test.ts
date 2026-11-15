@@ -203,3 +203,114 @@ describe("audio cancellation", () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe("back navigation", () => {
+  it.each([0, 1999, 2000, 2001])(
+    "uses the two-second interval boundary at %i ms",
+    (elapsed) => {
+      const { engine, at, cancel } = setup();
+      engine.jump(1);
+      engine.resume();
+      at(elapsed);
+      cancel.mockClear();
+      expect(engine.previousTarget("interval")).toBe(elapsed > 2000 ? 1 : 0);
+      engine.back("interval");
+      expect(engine.snapshot()).toEqual({
+        index: elapsed > 2000 ? 1 : 0,
+        remaining: elapsed > 2000 ? 3000 : 5000,
+        status: "running",
+      });
+      expect(cancel).toHaveBeenCalledOnce();
+      engine.back("interval");
+      expect(engine.index).toBe(0);
+    },
+  );
+  it.each(["interval", "series"] as const)(
+    "allows restarting the first %s only after two seconds",
+    (scope) => {
+      const { engine, at } = setup();
+      expect(engine.previousTarget(scope)).toBe(-1);
+      engine.resume();
+      at(2000);
+      expect(engine.previousTarget(scope)).toBe(-1);
+      at(2001);
+      expect(engine.previousTarget(scope)).toBe(0);
+      engine.back(scope);
+      expect(engine.remaining).toBe(5000);
+      expect(engine.previousTarget(scope)).toBe(-1);
+    },
+  );
+  it.each(["interval", "series"] as const)(
+    "preserves paused time and status for %s navigation",
+    (scope) => {
+      const { engine, at } = setup();
+      engine.jump(1);
+      engine.resume();
+      at(2200);
+      engine.pause();
+      at(100000);
+      engine.back(scope);
+      expect(engine.snapshot()).toEqual({
+        index: 1,
+        remaining: 3000,
+        status: "paused",
+      });
+      engine.back(scope);
+      expect(engine.snapshot()).toEqual({
+        index: 0,
+        remaining: 5000,
+        status: "paused",
+      });
+    },
+  );
+  it("uses total series position even at the beginning of a later interval", () => {
+    const { engine } = setup();
+    engine.jump(2);
+    expect(engine.previousTarget("interval")).toBe(1);
+    expect(engine.previousTarget("series")).toBe(1);
+    engine.back("series");
+    expect(engine.remaining).toBe(3000);
+    engine.back("series");
+    expect(engine.index).toBe(0);
+  });
+  it.each(["interval", "series"] as const)(
+    "resolves the live deadline for %s without replaying missed sounds",
+    (scope) => {
+      let now = 0;
+      const cue = vi.fn();
+      const cancel = vi.fn();
+      const engine = new TimerEngine(flatten(blocks), () => now, cue, cancel);
+      engine.resume();
+      now = 2001;
+      expect(engine.previousTarget(scope)).toBe(0);
+      now = 7200;
+      engine.back(scope);
+      expect(engine.snapshot()).toEqual({
+        index: 1,
+        remaining: 3000,
+        status: "running",
+      });
+      expect(cue).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
+  it("handles short intervals and keeps completion controls disabled", () => {
+    const { engine, at } = setup();
+    engine.jump(2);
+    engine.resume();
+    at(500);
+    engine.back("interval");
+    expect(engine.index).toBe(1);
+    at(10000);
+    expect(engine.status).toBe("complete");
+    const completed = engine.snapshot();
+    for (const scope of ["interval", "series"] as const) {
+      expect(engine.previousTarget(scope)).toBe(-1);
+      engine.back(scope);
+      expect(engine.snapshot()).toEqual(completed);
+    }
+    const empty = new TimerEngine([]);
+    expect(empty.previousTarget("interval")).toBe(-1);
+    expect(empty.previousTarget("series")).toBe(-1);
+  });
+});

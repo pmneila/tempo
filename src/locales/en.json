@@ -158,5 +158,7 @@
   "exportFailure": "Could not export this timeline. Try again.",
   "unexpectedError": "Something went wrong. Please try again.",
   "sortable": "sortable",
-  "intervalDescription": "Interval {{current}} of {{total}}: {{name}}"
+  "intervalDescription": "Interval {{current}} of {{total}}: {{name}}",
+  "timelineNavigation": "Timeline navigation",
+  "jumpToInterval": "Go to {{interval}}"
 }

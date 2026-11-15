@@ -74,6 +74,29 @@ export class TimerEngine {
     this.status = running ? "running" : "paused";
     this.deadline = this.clock() + this.remaining;
   }
+  previousTarget(scope: "interval" | "series") {
+    if (this.status === "complete" || !this.steps.length) return -1;
+    let index = this.index;
+    let remaining =
+      this.status === "running" ? this.deadline - this.clock() : this.remaining;
+    // Resolve delayed callbacks without emitting any cues during navigation.
+    while (remaining <= 0 && index < this.steps.length - 1)
+      remaining += this.steps[++index].seconds * 1000;
+    let elapsed = this.steps[index].seconds * 1000 - Math.max(0, remaining);
+    if (scope === "interval") return elapsed > 2000 ? index : index - 1;
+    const start = this.steps.findIndex(
+      (step) => step.blockId === this.steps[index].blockId,
+    );
+    for (let i = start; i < index; i++) elapsed += this.steps[i].seconds * 1000;
+    if (elapsed > 2000) return start;
+    if (start === 0) return -1;
+    return this.steps.findIndex(
+      (step) => step.blockId === this.steps[start - 1].blockId,
+    );
+  }
+  back(scope: "interval" | "series") {
+    this.jump(this.previousTarget(scope));
+  }
   seriesTarget(direction: -1 | 1) {
     const current = this.steps[this.index].blockId;
     if (direction === 1)
@@ -109,8 +132,9 @@ export class Beeper {
     const duration = end ? 0.45 : 0.12;
     oscillator.frequency.value = end ? 1100 : 740;
     gain.gain.setValueAtTime(0, c.currentTime);
-    gain.gain.linearRampToValueAtTime(0.18, c.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
+    gain.gain.linearRampToValueAtTime(0.8, c.currentTime + 0.01);
+    gain.gain.setValueAtTime(0.8, c.currentTime + duration - 0.025);
+    gain.gain.linearRampToValueAtTime(0, c.currentTime + duration);
     oscillator.connect(gain);
     gain.connect(c.destination);
     this.nodes.add(oscillator);
