@@ -22,7 +22,7 @@ const blocks: Block[] = [
 const steps = flatten(blocks);
 const layout = timelineLayout(steps);
 const paused: Snapshot = { index: 0, remaining: 10000, status: "paused" };
-describe("workout timeline geometry", () => {
+describe("timeline geometry", () => {
   it("scales each occurrence to duration and spans the entire routine", () => {
     expect(layout.duration).toBe(100);
     expect(
@@ -141,7 +141,7 @@ describe("timeline presentation", () => {
       />,
     );
     expect(html).toContain('aria-valuenow="100"');
-    expect(html).toContain("Workout complete");
+    expect(html).toContain("Timeline complete");
     expect(html).not.toContain("timeline-segment current");
     expect(html.match(/timeline-segment passed/g)).toHaveLength(6);
   });

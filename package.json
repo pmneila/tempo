@@ -1,5 +1,5 @@
 {
-  "name": "tempo-timer",
+  "name": "tempo",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -15,9 +15,11 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "i18next": "^27.1.2",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-i18next": "^18.0.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

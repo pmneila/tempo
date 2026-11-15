@@ -53,7 +53,10 @@ import { Beeper, TimerEngine, type Snapshot } from "./engine";
 import WorkoutTimeline from "./WorkoutTimeline";
 import LibraryToolbar from "./LibraryToolbar";
 import { loadLibrary, persistLibrary } from "./library";
-const loaded = loadLibrary();
+import { useTranslation } from "./i18n";
+import LanguageSelector from "./LanguageSelector";
+import { defaultNames } from "./defaultNames";
+import { message, translateMessage, type Message } from "./messages";
 function IconButton({
   label,
   children,
@@ -78,11 +81,12 @@ function Duration({
   value: number;
   onChange: (value: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className={`duration ${value === 0 ? "invalid" : ""}`}>
       <label>
         <input
-          aria-label="Minutes"
+          aria-label={t("minutes")}
           type="number"
           min="0"
           max="999"
@@ -95,12 +99,12 @@ function Duration({
             )
           }
         />
-        <span>min</span>
+        <span>{t("minuteUnit")}</span>
       </label>
       <span className="colon">:</span>
       <label>
         <input
-          aria-label="Seconds"
+          aria-label={t("seconds")}
           type="number"
           min="0"
           max="59"
@@ -112,16 +116,17 @@ function Duration({
             )
           }
         />
-        <span>sec</span>
+        <span>{t("secondUnit")}</span>
       </label>
     </div>
   );
 }
 function EndDrop() {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: "root-end" });
   return (
     <div ref={setNodeRef} className={`end-drop ${isOver ? "over" : ""}`}>
-      Drop here to place at the end of the timeline
+      {t("dropEnd")}
     </div>
   );
 }
@@ -138,6 +143,7 @@ function SortableCard({
   nested?: boolean;
   body?: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const {
     attributes,
     listeners,
@@ -157,8 +163,9 @@ function SortableCard({
         <button
           type="button"
           className="drag-handle"
-          aria-label={`Drag ${item.name}`}
+          aria-label={t("dragItem", { name: item.name })}
           {...attributes}
+          aria-roledescription={t("sortable")}
           {...listeners}
         >
           <GripVertical size={18} />
@@ -171,6 +178,8 @@ function SortableCard({
   );
 }
 export default function App() {
+  const { t } = useTranslation();
+  const [loaded] = useState(() => loadLibrary(defaultNames(t)));
   const [library, setLibrary] = useState(loaded.library);
   const blocks = library.draft.blocks;
   const setBlocks: React.Dispatch<React.SetStateAction<Block[]>> = (change) =>
@@ -182,12 +191,12 @@ export default function App() {
           typeof change === "function" ? change(old.draft.blocks) : change,
       },
     }));
-  const [storageError, setStorageError] = useState("");
-  const [notice, setNotice] = useState(loaded.error ?? "");
+  const [storageError, setStorageError] = useState<Message | null>(null);
+  const [notice, setNotice] = useState<Message | null>(loaded.error ?? null);
   const [view, setView] = useState<"edit" | "workout">("edit");
   const [menu, setMenu] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
-  const [soundError, setSoundError] = useState("");
+  const [soundError, setSoundError] = useState<Message | null>(null);
   const beeper = useRef(new Beeper());
   const engine = useRef<TimerEngine | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot>({
@@ -205,11 +214,9 @@ export default function App() {
     if (loaded.error && library === loaded.library) return;
     try {
       persistLibrary(library);
-      setStorageError("");
+      setStorageError(null);
     } catch {
-      setStorageError(
-        "Could not store your timelines or working draft in this browser. Keep this page open to preserve your edits, or export the draft as a backup.",
-      );
+      setStorageError(message("storageFailure"));
     }
   }, [library]);
   useEffect(() => {
@@ -293,13 +300,21 @@ export default function App() {
     setBlocks((old) =>
       old.flatMap((b) =>
         b.id === id
-          ? [b, duplicate(b)]
+          ? [b, duplicate(b, t("copyName", { name: b.name }))]
           : b.kind === "series"
             ? [
                 {
                   ...b,
                   intervals: b.intervals.flatMap((i) =>
-                    i.id === id ? [i, duplicate(i) as Interval] : [i],
+                    i.id === id
+                      ? [
+                          i,
+                          duplicate(
+                            i,
+                            t("copyName", { name: i.name }),
+                          ) as Interval,
+                        ]
+                      : [i],
                   ),
                 },
               ]
@@ -332,6 +347,14 @@ export default function App() {
       );
     }
   }
+  function dragName(id: string | number) {
+    if (id === "root-end") return t("timelineEnd");
+    const item = [
+      ...blocks,
+      ...blocks.flatMap((b) => (b.kind === "series" ? b.intervals : [])),
+    ].find((b) => b.id === id);
+    return item?.name || t("untitled");
+  }
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
@@ -353,11 +376,9 @@ export default function App() {
   async function audio() {
     try {
       await beeper.current.initialize();
-      setSoundError("");
+      setSoundError(null);
     } catch {
-      setSoundError(
-        "Sound could not be enabled. Check your browser audio settings and try Preview sound.",
-      );
+      setSoundError(message("audioFailure"));
     }
   }
   async function start() {
@@ -393,14 +414,14 @@ export default function App() {
     return (
       <div className="item-actions">
         <IconButton
-          label={`Move ${item.name} up`}
+          label={t("moveUp", { name: item.name })}
           disabled={index === 0}
           onClick={() => move(item.id, -1)}
         >
           <ArrowUp size={16} />
         </IconButton>
         <IconButton
-          label={`Move ${item.name} down`}
+          label={t("moveDown", { name: item.name })}
           disabled={index === count - 1}
           onClick={() => move(item.id, 1)}
         >
@@ -408,7 +429,7 @@ export default function App() {
         </IconButton>
         <div className="menu-wrap">
           <IconButton
-            label={`Options for ${item.name}`}
+            label={t("itemOptions", { name: item.name })}
             aria-expanded={menu === item.id}
             onClick={() => setMenu(menu === item.id ? null : item.id)}
           >
@@ -417,14 +438,14 @@ export default function App() {
           {menu === item.id && (
             <div className="item-menu">
               <button onClick={() => copy(item.id)}>
-                <Copy size={15} /> Duplicate
+                <Copy size={15} /> {t("duplicate")}
               </button>
               {item.kind === "interval" && (
                 <>
                   <label className="move-label">
-                    Move to
+                    {t("moveTo")}
                     <select
-                      aria-label={`Move ${item.name} to`}
+                      aria-label={t("moveItemTo", { name: item.name })}
                       value={parent ?? "root-end"}
                       onChange={(e) => {
                         setBlocks((old) =>
@@ -433,12 +454,12 @@ export default function App() {
                         setMenu(null);
                       }}
                     >
-                      <option value="root-end">Timeline (end)</option>
+                      <option value="root-end">{t("timelineEnd")}</option>
                       {blocks
                         .filter((b) => b.kind === "series")
                         .map((b) => (
                           <option key={b.id} value={b.id}>
-                            {b.name || "Untitled series"}
+                            {b.name || t("untitledSeries")}
                           </option>
                         ))}
                     </select>
@@ -450,15 +471,18 @@ export default function App() {
                         setMenu(null);
                       }}
                     >
-                      <ArrowRight size={15} /> Move out of series
+                      <ArrowRight size={15} /> {t("moveOut")}
                     </button>
                   )}
                 </>
               )}
               <button className="delete" onClick={() => remove(item.id)}>
-                <Trash2 size={15} /> Delete {item.kind}
+                <Trash2 size={15} />{" "}
+                {t(
+                  item.kind === "interval" ? "deleteInterval" : "deleteSeries",
+                )}
               </button>
-              <button onClick={() => setMenu(null)}>Close menu</button>
+              <button onClick={() => setMenu(null)}>{t("closeMenu")}</button>
             </div>
           )}
         </div>
@@ -482,53 +506,81 @@ export default function App() {
             e.preventDefault();
             if (view === "workout") leave();
           }}
-          aria-label="Tempo routine editor"
+          aria-label={t("editorLabel")}
         >
           <span className="brand-icon">
             <Activity size={23} />
           </span>
           tempo<span className="brand-dot">.</span>
         </a>
-        <button
-          className="sound-toggle"
-          onClick={() => {
-            beeper.current.cancel();
-            beeper.current.muted = !muted;
-            setMuted(!muted);
-          }}
-          aria-pressed={muted}
-          aria-label={muted ? "Unmute sounds" : "Mute sounds"}
-        >
-          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-          <span>Sound {muted ? "off" : "on"}</span>
-        </button>
+        <div className="header-controls">
+          <LanguageSelector />
+          <button
+            className="sound-toggle"
+            onClick={() => {
+              beeper.current.cancel();
+              beeper.current.muted = !muted;
+              setMuted(!muted);
+            }}
+            aria-pressed={muted}
+            aria-label={t(muted ? "unmute" : "mute")}
+          >
+            {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            <span>{t(muted ? "soundOff" : "soundOn")}</span>
+          </button>
+        </div>
       </header>
       {notice && (
         <div className="notice" role="alert">
-          {notice}
-          <button onClick={() => setNotice("")}>Dismiss</button>
+          {translateMessage(notice, t)}
+          <button onClick={() => setNotice(null)}>{t("dismiss")}</button>
         </div>
       )}
       {storageError && (
         <div className="notice" role="alert">
-          {storageError}
+          {translateMessage(storageError, t)}
           <button onClick={() => setLibrary((old) => ({ ...old }))}>
-            Retry
+            {t("retry")}
           </button>
         </div>
       )}
       {soundError && (
         <div className="notice" role="alert">
-          {soundError}
+          {translateMessage(soundError, t)}
         </div>
       )}
       {view === "edit" ? (
         <main className="editor">
           <LibraryToolbar library={library} onChange={setLibrary} />
           <div className="workspace">
-            <section className="timeline" aria-label="Routine timeline">
+            <section className="timeline" aria-label={t("routineTimeline")}>
               <DndContext
                 sensors={sensors}
+                accessibility={{
+                  screenReaderInstructions: {
+                    draggable: t("dragInstructions"),
+                  },
+                  announcements: {
+                    onDragStart: ({ active }) =>
+                      t("dragStarted", { name: dragName(active.id) }),
+                    onDragOver: ({ active, over }) =>
+                      over
+                        ? t("dragOver", {
+                            name: dragName(active.id),
+                            target: dragName(over.id),
+                          })
+                        : t("dragOutside", { name: dragName(active.id) }),
+                    onDragEnd: ({ active, over }) =>
+                      over
+                        ? t("dragEnded", {
+                            name: dragName(active.id),
+                            target: dragName(over.id),
+                          })
+                        : t("dragOutside", { name: dragName(active.id) }),
+                    onDragCancel: ({ active }) =>
+                      t("dragCancelled", { name: dragName(active.id) }),
+                  },
+                }}
                 collisionDetection={(args) =>
                   closestCenter({
                     ...args,
@@ -577,8 +629,8 @@ export default function App() {
                                       <div className="item-details">
                                         <input
                                           className="name-input"
-                                          aria-label="Interval name"
-                                          placeholder="Untitled interval"
+                                          aria-label={t("intervalName")}
+                                          placeholder={t("untitledInterval")}
                                           value={item.name}
                                           onChange={(e) =>
                                             update(item.id, {
@@ -588,7 +640,7 @@ export default function App() {
                                         />
                                         {item.seconds === 0 && (
                                           <small className="field-error">
-                                            Set a duration above zero
+                                            {t("durationRequired")}
                                           </small>
                                         )}
                                       </div>
@@ -603,8 +655,7 @@ export default function App() {
                                 </SortableContext>
                                 {!block.intervals.length && (
                                   <p className="empty-series">
-                                    Add an interval or move one into this
-                                    series.
+                                    {t("emptySeries")}
                                   </p>
                                 )}
                                 <button
@@ -617,7 +668,7 @@ export default function App() {
                                               ...b,
                                               intervals: [
                                                 ...b.intervals,
-                                                interval(),
+                                                interval(t("newInterval")),
                                               ],
                                             }
                                           : b,
@@ -625,7 +676,7 @@ export default function App() {
                                     )
                                   }
                                 >
-                                  <Plus size={16} /> Add interval to series
+                                  <Plus size={16} /> {t("addToSeries")}
                                 </button>
                               </div>
                             )
@@ -633,19 +684,23 @@ export default function App() {
                         >
                           <div className="item-details">
                             <span className="type-label">
-                              {block.kind === "series" ? "SERIES" : "INTERVAL"}
+                              {t(
+                                block.kind === "series"
+                                  ? "seriesType"
+                                  : "intervalType",
+                              )}
                             </span>
                             <input
                               className="name-input"
                               aria-label={
                                 block.kind === "series"
-                                  ? "Series name"
-                                  : "Interval name"
+                                  ? t("seriesName")
+                                  : t("intervalName")
                               }
                               placeholder={
                                 block.kind === "series"
-                                  ? "Untitled series"
-                                  : "Untitled interval"
+                                  ? t("untitledSeries")
+                                  : t("untitledInterval")
                               }
                               value={block.name}
                               onChange={(e) =>
@@ -654,13 +709,15 @@ export default function App() {
                             />
                             {block.kind === "series" && (
                               <label className="repeat-control">
-                                Rounds
+                                {t("rounds")}
                                 <input
                                   type="number"
                                   min="1"
                                   max="99"
                                   step="1"
-                                  aria-label={`Rounds for ${block.name || "Untitled series"}`}
+                                  aria-label={t("roundsFor", {
+                                    name: block.name || t("untitledSeries"),
+                                  })}
                                   value={block.repeats ?? 1}
                                   onChange={(e) =>
                                     update(block.id, {
@@ -689,15 +746,17 @@ export default function App() {
                             <span className="series-duration">
                               {format(total([block]))}
                               <small>
-                                {block.intervals.length} intervals ×{" "}
-                                {block.repeats ?? 1}
+                                {t("intervalCount", {
+                                  count: block.intervals.length,
+                                })}{" "}
+                                × {block.repeats ?? 1}
                               </small>
                             </span>
                           )}
                         </SortableCard>
                         {block.kind === "interval" && block.seconds === 0 && (
                           <p className="field-error standalone-error">
-                            Set a duration above zero.
+                            {t("durationRequired")}
                           </p>
                         )}
                       </div>
@@ -709,15 +768,17 @@ export default function App() {
               {!blocks.length && (
                 <div className="empty-state">
                   <Activity size={36} />
-                  <h3>Empty routine</h3>
-                  <p>Add an interval or a series to build your routine.</p>
+                  <h3>{t("emptyRoutine")}</h3>
+                  <p>{t("emptyRoutineHelp")}</p>
                 </div>
               )}
               <div className="add-buttons">
                 <button
-                  onClick={() => setBlocks((old) => [...old, interval()])}
+                  onClick={() =>
+                    setBlocks((old) => [...old, interval(t("newInterval"))])
+                  }
                 >
-                  <Plus size={18} /> Add interval
+                  <Plus size={18} /> {t("addInterval")}
                 </button>
                 <button
                   onClick={() =>
@@ -726,35 +787,34 @@ export default function App() {
                       {
                         id: uid(),
                         kind: "series",
-                        name: "New series",
-                        intervals: [interval()],
+                        name: t("newSeries"),
+                        intervals: [interval(t("newInterval"))],
                       },
                     ])
                   }
                 >
-                  <Layers size={18} /> Add series
+                  <Layers size={18} /> {t("addSeries")}
                 </button>
               </div>
               <p className="editor-hint">
-                <GripVertical size={14} /> Drag to reorder, or use the arrows
-                and item options.
+                <GripVertical size={14} /> {t("reorderHint")}
               </p>
             </section>
             <aside className="sidebar">
               <div className="summary-card">
-                <h2>Routine summary</h2>
+                <h2>{t("summary")}</h2>
                 <div className="total-time">
                   {format(duration)}
-                  <span>TOTAL DURATION</span>
+                  <span>{t("totalDuration")}</span>
                 </div>
                 <div className="stats">
                   <div>
                     <strong>{steps.length}</strong>
-                    <span>Intervals</span>
+                    <span>{t("intervalLabel", { count: steps.length })}</span>
                   </div>
                   <div>
                     <strong>{seriesCount}</strong>
-                    <span>Series</span>
+                    <span>{t("seriesLabel", { count: seriesCount })}</span>
                   </div>
                 </div>
                 <button
@@ -762,13 +822,13 @@ export default function App() {
                   disabled={!canStart}
                   onClick={() => void start()}
                 >
-                  <Play size={19} fill="currentColor" /> Start workout
+                  <Play size={19} fill="currentColor" /> {t("start")}
                 </button>
                 {!canStart && (
                   <p className="validation">
                     {!blocks.length
-                      ? "Add an interval to get started."
-                      : "Give every interval a duration and every series at least one interval."}
+                      ? t("addBeforeStart")
+                      : t("validBeforeStart")}
                   </p>
                 )}
               </div>
@@ -777,13 +837,10 @@ export default function App() {
                 onClick={async () => {
                   await audio();
                   if (!beeper.current.muted) beeper.current.play(true);
-                  else
-                    setSoundError(
-                      "Sound is muted. Turn sound on to preview the interval sound.",
-                    );
+                  else setSoundError(message("audioMuted"));
                 }}
               >
-                <Volume2 size={16} /> Preview sound
+                <Volume2 size={16} /> {t("previewSound")}
               </button>
             </aside>
           </div>
@@ -792,34 +849,36 @@ export default function App() {
         <main className="workout">
           <div className="workout-top">
             <button className="text-button" onClick={leave}>
-              <ArrowLeft size={17} /> Back to editor
+              <ArrowLeft size={17} /> {t("backToEditor")}
             </button>
             <span className={`status-pill ${snapshot.status}`}>
               {completed
-                ? "WORKOUT COMPLETE"
+                ? t("completeStatus")
                 : snapshot.status === "running"
-                  ? "RUNNING"
-                  : "PAUSED"}
+                  ? t("running")
+                  : t("paused")}
             </span>
           </div>
           <div className="player-card">
             <div className="eyebrow">
-              {completed ? "WORKOUT" : current?.seriesName || "WORKOUT"}
+              {completed
+                ? t("timelineType")
+                : current?.seriesName || t("timelineType")}
             </div>
             <h1>
               {completed
-                ? "Workout complete"
-                : current?.name || "Untitled interval"}
+                ? t("complete")
+                : current?.name || t("untitledInterval")}
             </h1>
             <p className="interval-position">
               {completed
-                ? `${steps.length} intervals completed`
-                : `Interval ${snapshot.index + 1} of ${steps.length}${current?.rounds && current.rounds > 1 ? ` · Round ${current.round} of ${current.rounds}` : ""}`}
+                ? t("completedIntervals", { count: steps.length })
+                : `${t("intervalPosition", { current: snapshot.index + 1, total: steps.length })}${current?.rounds && current.rounds > 1 ? ` · ${t("roundPosition", { current: current.round, total: current.rounds })}` : ""}`}
             </p>
             <div
               className={`countdown ${!completed && snapshot.remaining <= 3000 ? "countdown-ending" : ""}`}
               role="timer"
-              aria-label="Time remaining"
+              aria-label={t("timeRemaining")}
             >
               {completed ? (
                 <span className="completion-icon">
@@ -831,29 +890,35 @@ export default function App() {
             </div>
             <WorkoutTimeline steps={steps} snapshot={snapshot} />
             <div className="progress-label">
-              <span>{Math.round(progress)}% complete</span>
               <span>
-                {format(Math.ceil(Math.max(0, duration - elapsed)))} remaining
+                {t("percentComplete", { percent: Math.round(progress) })}
+              </span>
+              <span>
+                {t("remaining", {
+                  time: format(Math.ceil(Math.max(0, duration - elapsed))),
+                })}
               </span>
             </div>
             <div className="playback-controls">
               <IconButton
-                label="Previous series"
+                label={t("previousSeries")}
                 disabled={
                   completed || (engine.current?.seriesTarget(-1) ?? -1) < 0
                 }
                 onClick={() => control((e) => e.jump(e.seriesTarget(-1)))}
               >
                 <SkipBack size={23} />
-                <span aria-hidden="true">Series</span>
+                <span aria-hidden="true">{t("seriesLabel", { count: 1 })}</span>
               </IconButton>
               <IconButton
-                label="Previous interval"
+                label={t("previousInterval")}
                 disabled={completed || snapshot.index === 0}
                 onClick={() => control((e) => e.jump(e.index - 1))}
               >
                 <ArrowLeft size={24} />
-                <span aria-hidden="true">Interval</span>
+                <span aria-hidden="true">
+                  {t("intervalLabel", { count: 1 })}
+                </span>
               </IconButton>
               <button
                 className="primary play-pause"
@@ -877,46 +942,46 @@ export default function App() {
                 )}
                 <span>
                   {completed
-                    ? "Play again"
+                    ? t("playAgain")
                     : snapshot.status === "running"
-                      ? "Pause"
-                      : "Resume"}
+                      ? t("pause")
+                      : t("resume")}
                 </span>
               </button>
               <IconButton
-                label="Next interval"
+                label={t("nextInterval")}
                 disabled={completed || snapshot.index >= steps.length - 1}
                 onClick={() => control((e) => e.jump(e.index + 1))}
               >
                 <ArrowRight size={24} />
-                <span aria-hidden="true">Interval</span>
+                <span aria-hidden="true">
+                  {t("intervalLabel", { count: 1 })}
+                </span>
               </IconButton>
               <IconButton
-                label="Next series"
+                label={t("nextSeries")}
                 disabled={
                   completed || (engine.current?.seriesTarget(1) ?? -1) < 0
                 }
                 onClick={() => control((e) => e.jump(e.seriesTarget(1)))}
               >
                 <SkipForward size={23} />
-                <span aria-hidden="true">Series</span>
+                <span aria-hidden="true">{t("seriesLabel", { count: 1 })}</span>
               </IconButton>
             </div>
             <button
               className="text-button reset-button"
               onClick={() => control((e) => e.reset())}
             >
-              <RotateCcw size={15} /> Stop & reset
+              <RotateCcw size={15} /> {t("reset")}
             </button>
           </div>
           <div className="up-next">
             <span className="eyebrow">
-              {completed ? "TOTAL DURATION" : "UP NEXT"}
+              {completed ? t("totalDuration") : t("upNext")}
             </span>
             <strong>
-              {completed
-                ? "Workout complete"
-                : next?.name || "Workout complete"}
+              {completed ? t("complete") : next?.name || t("complete")}
             </strong>
             <span>
               {!completed && next ? format(next.seconds) : format(duration)}

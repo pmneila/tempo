@@ -1,7 +1,15 @@
+import { AppError, message, type Message } from "./messages";
+import { englishNames, type DefaultNames } from "./defaultNames";
+import en from "./locales/en.json";
 import { loadRoutine, parseBlocks, uid, type Block } from "./model";
 
 export type SavedTimeline = { id: string; name: string; blocks: Block[] };
-export type Draft = { sourceId: string | null; name: string; blocks: Block[] };
+export type Draft = {
+  sourceId: string | null;
+  name: string;
+  blocks: Block[];
+  initialName?: string;
+};
 export type Library = { version: 2; timelines: SavedTimeline[]; draft: Draft };
 export const LIBRARY_KEY = "tempo.library.v2";
 export const MAX_IMPORT_BYTES = 1024 * 1024;
@@ -23,15 +31,13 @@ export function checkedName(
   except?: string,
 ) {
   const trimmed = name.trim();
-  if (!trimmed) throw Error("Enter a timeline name.");
+  if (!trimmed) throw new AppError("nameRequired");
   if (
     timelines.some(
       (t) => t.id !== except && nameKey(t.name) === nameKey(trimmed),
     )
   )
-    throw Error(
-      "A timeline with this name already exists. Choose another name.",
-    );
+    throw new AppError("nameConflict");
   return trimmed;
 }
 export function uniqueName(base: string, timelines: SavedTimeline[]) {
@@ -41,8 +47,8 @@ export function uniqueName(base: string, timelines: SavedTimeline[]) {
     name = `${base.trim() || "Untitled timeline"} (${count++})`;
   return name;
 }
-export function emptyDraft(): Draft {
-  return { sourceId: null, name: "Untitled timeline", blocks: [] };
+export function emptyDraft(name = englishNames.untitledTimeline): Draft {
+  return { sourceId: null, name, blocks: [], initialName: name };
 }
 export function isDirty(library: Library) {
   const source = library.timelines.find((t) => t.id === library.draft.sourceId);
@@ -50,18 +56,22 @@ export function isDirty(library: Library) {
     ? source.name !== library.draft.name ||
         JSON.stringify(source.blocks) !== JSON.stringify(library.draft.blocks)
     : library.draft.blocks.length > 0 ||
-        library.draft.name !== "Untitled timeline";
+        library.draft.name !==
+          (library.draft.initialName ?? "Untitled timeline");
 }
 export function loadTimeline(library: Library, id: string): Library {
   const timeline = library.timelines.find((t) => t.id === id);
-  if (!timeline) throw Error("This timeline could not be found.");
+  if (!timeline) throw new AppError("timelineNotFound");
   return {
     ...library,
     draft: { sourceId: id, name: timeline.name, blocks: copy(timeline.blocks) },
   };
 }
-export function newTimeline(library: Library): Library {
-  return { ...library, draft: emptyDraft() };
+export function newTimeline(
+  library: Library,
+  name = englishNames.untitledTimeline,
+): Library {
+  return { ...library, draft: emptyDraft(name) };
 }
 export function saveDraft(
   library: Library,
@@ -90,12 +100,15 @@ export function saveDraft(
 export function renameDraft(library: Library, name: string): Library {
   return { ...library, draft: { ...library.draft, name } };
 }
-export function duplicateTimeline(library: Library): Library {
+export function duplicateTimeline(library: Library, name?: string): Library {
   const source = library.timelines.find((t) => t.id === library.draft.sourceId);
-  if (!source) throw Error("Save this timeline before duplicating it.");
+  if (!source) throw new AppError("saveBeforeDuplicate");
   const saved = {
     id: uid(),
-    name: uniqueName(`${source.name} copy`, library.timelines),
+    name: uniqueName(
+      name ?? en.copyName.replace("{{name}}", source.name),
+      library.timelines,
+    ),
     blocks: freshBlocks(source.blocks),
   };
   return loadTimeline(
@@ -103,19 +116,26 @@ export function duplicateTimeline(library: Library): Library {
     saved.id,
   );
 }
-export function deleteTimeline(library: Library, id: string): Library {
+export function deleteTimeline(
+  library: Library,
+  id: string,
+  name = englishNames.untitledTimeline,
+): Library {
   const timelines = library.timelines.filter((t) => t.id !== id);
   if (library.draft.sourceId !== id) return { ...library, timelines };
   return timelines.length
     ? loadTimeline({ ...library, timelines }, timelines[0].id)
-    : newTimeline({ ...library, timelines });
+    : newTimeline({ ...library, timelines }, name);
 }
-export function exportTimeline(draft: Draft) {
+export function exportTimeline(
+  draft: Draft,
+  untitled = englishNames.untitledTimeline,
+) {
   return JSON.stringify(
     {
       format: "tempo-timeline",
       version: 1,
-      name: draft.name.trim() || "Untitled timeline",
+      name: draft.name.trim() || untitled,
       blocks: draft.blocks,
     },
     null,
@@ -127,17 +147,17 @@ export function importTimeline(
   timelines: SavedTimeline[],
 ): Draft {
   if (new TextEncoder().encode(text).length > MAX_IMPORT_BYTES)
-    throw Error("Choose a timeline file smaller than 1 MB.");
+    throw new AppError("singleFileSize");
   let value;
   try {
     value = JSON.parse(text);
   } catch {
-    throw Error("This file is not valid JSON.");
+    throw new AppError("invalidJson");
   }
   if (value?.format !== "tempo-timeline" || value.version !== 1)
-    throw Error("This file is not a supported Tempo timeline.");
+    throw new AppError("unsupportedTimeline");
   if (typeof value.name !== "string" || !value.name.trim())
-    throw Error("The timeline needs a name.");
+    throw new AppError("missingTimelineName");
   return {
     sourceId: null,
     name: uniqueName(value.name, timelines),
@@ -170,6 +190,8 @@ export function parseLibrary(value: unknown): Library {
   const draft = data.draft;
   if (
     typeof draft.name !== "string" ||
+    (draft.initialName !== undefined &&
+      typeof draft.initialName !== "string") ||
     (draft.sourceId !== null &&
       (typeof draft.sourceId !== "string" || !ids.has(draft.sourceId)))
   )
@@ -181,19 +203,29 @@ export function parseLibrary(value: unknown): Library {
       sourceId: draft.sourceId,
       name: draft.name,
       blocks: parseBlocks(draft.blocks),
+      ...(draft.initialName === undefined
+        ? {}
+        : { initialName: draft.initialName }),
     },
   };
 }
-export function loadLibrary(): { library: Library; error?: string } {
-  const fallback: Library = { version: 2, timelines: [], draft: emptyDraft() };
+export function loadLibrary(names: DefaultNames = englishNames): {
+  library: Library;
+  error?: Message;
+} {
+  const fallback: Library = {
+    version: 2,
+    timelines: [],
+    draft: emptyDraft(names.untitledTimeline),
+  };
   try {
     const raw = localStorage.getItem(LIBRARY_KEY);
     if (raw !== null) return { library: parseLibrary(JSON.parse(raw)) };
-    const old = loadRoutine();
+    const old = loadRoutine(names);
     if (old.error) return { library: fallback, error: old.error };
     const saved: SavedTimeline = {
       id: uid(),
-      name: "My timeline",
+      name: names.myTimeline,
       blocks: copy(old.blocks),
     };
     return {
@@ -202,8 +234,7 @@ export function loadLibrary(): { library: Library; error?: string } {
   } catch {
     return {
       library: fallback,
-      error:
-        "Could not load your timeline library. Stored data has been left untouched. You can create a new timeline below.",
+      error: message("loadLibraryFailure"),
     };
   }
 }
@@ -238,23 +269,23 @@ export function readTimelineFile(
   existing: SavedTimeline[],
 ): TimelineFile {
   if (new TextEncoder().encode(text).length > MAX_LIBRARY_IMPORT_BYTES)
-    throw Error("Choose a library file smaller than 10 MB.");
+    throw new AppError("libraryFileSize");
   let data;
   try {
     data = JSON.parse(text);
   } catch {
-    throw Error("This file is not valid JSON.");
+    throw new AppError("invalidJson");
   }
   if (data?.format !== "tempo-library")
     return { kind: "timeline", draft: importTimeline(text, existing) };
   if (data.version !== 1 || !Array.isArray(data.timelines))
-    throw Error("This file is not a supported Tempo library.");
+    throw new AppError("unsupportedLibrary");
   const validated = data.timelines.map((entry: unknown) => {
     if (!entry || typeof entry !== "object")
-      throw Error("Invalid timeline in library file.");
+      throw new AppError("invalidLibraryTimeline");
     const item = entry as Record<string, unknown>;
     if (typeof item.name !== "string" || !item.name.trim())
-      throw Error("Each timeline in the library needs a name.");
+      throw new AppError("libraryNameRequired");
     return { name: item.name.trim(), blocks: parseBlocks(item.blocks) };
   });
   return {

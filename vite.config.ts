@@ -5,5 +5,5 @@ export default defineConfig(({ command, isPreview }) => ({
   plugins: [react()],
   // GitHub Pages serves a project site under the repository name.
   // Keep local development at / so existing browser storage stays accessible.
-  base: command === "build" || isPreview ? "/tempo-timer/" : "/",
+  base: command === "build" || isPreview ? "/tempo/" : "/",
 }));

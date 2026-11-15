@@ -3,8 +3,11 @@ import type { Snapshot } from "./engine";
 import { format, type Step } from "./model";
 import { timelineLabel, timelineLayout, timelinePosition } from "./timeline";
 
+import { useTranslation } from "./i18n";
+
 type Props = { steps: Step[]; snapshot: Snapshot };
 export default function WorkoutTimeline({ steps, snapshot }: Props) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const clipPrefix = useId();
   const [width, setWidth] = useState(300);
@@ -13,10 +16,10 @@ export default function WorkoutTimeline({ steps, snapshot }: Props) {
   const complete = snapshot.status === "complete";
   const current = steps[snapshot.index];
   const currentText = complete
-    ? "Workout complete"
+    ? t("complete")
     : current
-      ? `${snapshot.status === "paused" ? "Paused. " : ""}Interval ${snapshot.index + 1} of ${steps.length}: ${current.name || "Untitled interval"}${current.seriesName ? `, ${current.seriesName}` : ""}${current.rounds && current.rounds > 1 ? `, round ${current.round} of ${current.rounds}` : ""}`
-      : "No intervals";
+      ? `${snapshot.status === "paused" ? `${t("pausedSentence")} ` : ""}${t("intervalDescription", { current: snapshot.index + 1, total: steps.length, name: current.name || t("untitledInterval") })}${current.seriesName ? `, ${current.seriesName}` : ""}${current.rounds && current.rounds > 1 ? `, ${t("roundPositionLower", { current: current.round, total: current.rounds })}` : ""}`
+      : t("noIntervals");
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -35,11 +38,14 @@ export default function WorkoutTimeline({ steps, snapshot }: Props) {
       ref={ref}
       className="workout-timeline"
       role="progressbar"
-      aria-label="Workout timeline"
+      aria-label={t("timelineOverview")}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(position * 100)}
-      aria-valuetext={`${Math.round(position * 100)}% through routine. ${currentText}`}
+      aria-valuetext={t("progressDescription", {
+        percent: Math.round(position * 100),
+        description: currentText,
+      })}
     >
       <svg
         width="100%"
@@ -49,7 +55,7 @@ export default function WorkoutTimeline({ steps, snapshot }: Props) {
       >
         {layout.blocks.map((block, index) => {
           const span = (block.end - block.start) * usable;
-          const label = timelineLabel(block.name || "Untitled", span);
+          const label = timelineLabel(block.name || t("untitled"), span);
           const clipId = `${clipPrefix}-block-${index}`;
           return (
             <g key={block.key} className="timeline-block">
@@ -72,7 +78,7 @@ export default function WorkoutTimeline({ steps, snapshot }: Props) {
                     clipPath={`url(#${clipId})`}
                   >
                     {label}
-                    <title>{block.name || "Untitled"}</title>
+                    <title>{block.name || t("untitled")}</title>
                   </text>
                 </>
               )}
@@ -95,7 +101,7 @@ export default function WorkoutTimeline({ steps, snapshot }: Props) {
               key={segment.key}
               className={`timeline-segment ${passed ? "passed" : active ? "current" : "upcoming"}`}
             >
-              <title>{`${segment.step.name || "Untitled interval"} · ${format(segment.step.seconds)}${segment.step.seriesName ? ` · ${segment.step.seriesName}` : ""}${segment.step.rounds && segment.step.rounds > 1 ? ` · Round ${segment.step.round} of ${segment.step.rounds}` : ""}`}</title>
+              <title>{`${segment.step.name || t("untitledInterval")} · ${format(segment.step.seconds)}${segment.step.seriesName ? ` · ${segment.step.seriesName}` : ""}${segment.step.rounds && segment.step.rounds > 1 ? ` · ${t("roundPosition", { current: segment.step.round, total: segment.step.rounds })}` : ""}`}</title>
               <rect
                 x={start}
                 y="30"

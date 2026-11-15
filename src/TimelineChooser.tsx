@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef } from "react";
 import { Check, ChevronDown, FilePlus2 } from "lucide-react";
 import type { SavedTimeline } from "./library";
+import { format, total } from "./model";
+import { useTranslation } from "./i18n";
 
 type Props = {
   timelines: SavedTimeline[];
@@ -18,6 +20,7 @@ export default function TimelineChooser({
   onOpenChange,
   onChoose,
 }: Props) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -58,7 +61,7 @@ export default function TimelineChooser({
         ref={trigger}
         type="button"
         className="icon-button timeline-chooser-trigger"
-        aria-label="Choose timeline"
+        aria-label={t("chooseTimeline")}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -85,7 +88,7 @@ export default function TimelineChooser({
           ref={menu}
           id={menuId}
           role="menu"
-          aria-label="Saved timelines"
+          aria-label={t("savedTimelines")}
           className="timeline-chooser-menu"
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -130,28 +133,39 @@ export default function TimelineChooser({
             className="chooser-new"
             onClick={() => choose(null)}
           >
-            <FilePlus2 size={16} /> New timeline
+            <FilePlus2 size={16} /> {t("newTimeline")}
           </button>
           <div role="separator" className="chooser-separator" />
           {timelines.length ? (
             <div className="chooser-list">
-              {timelines.map((t) => (
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  tabIndex={-1}
-                  aria-checked={t.id === sourceId}
-                  key={t.id}
-                  onClick={() => choose(t.id)}
-                  title={t.name}
-                >
-                  <span className="chooser-name">{t.name}</span>
-                  {t.id === sourceId && <Check size={15} />}
-                </button>
-              ))}
+              {timelines.map((t, index) => {
+                const duration = format(total(t.blocks));
+                const durationId = `${menuId}-duration-${index}`;
+                return (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    tabIndex={-1}
+                    aria-checked={t.id === sourceId}
+                    aria-label={t.name}
+                    aria-describedby={durationId}
+                    key={t.id}
+                    onClick={() => choose(t.id)}
+                    title={`${t.name} — ${duration}`}
+                  >
+                    <span className="chooser-name">{t.name}</span>
+                    <span className="chooser-duration" id={durationId}>
+                      {duration}
+                    </span>
+                    <span className="chooser-check" aria-hidden="true">
+                      {t.id === sourceId && <Check size={15} />}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           ) : (
-            <p className="chooser-empty">No saved timelines</p>
+            <p className="chooser-empty">{t("noSaved")}</p>
           )}
         </div>
       )}

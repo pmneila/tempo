@@ -11,6 +11,7 @@ import {
   Copy,
   Download,
   MoreHorizontal,
+  RotateCcw,
   Save,
   Trash2,
   Upload,
@@ -34,6 +35,14 @@ import {
 } from "./library";
 
 import TimelineChooser from "./TimelineChooser";
+import { useTranslation } from "./i18n";
+import {
+  AppError,
+  errorMessage,
+  message,
+  translateMessage,
+  type Message,
+} from "./messages";
 
 type Action =
   | { type: "load"; id: string }
@@ -43,6 +52,7 @@ type Action =
   | { type: "import"; draft: Draft };
 type ModalState =
   | { type: "unsaved"; action: Action }
+  | { type: "discard"; id: string; name: string }
   | { type: "name" }
   | { type: "delete"; id: string; name: string };
 function Modal({
@@ -79,17 +89,18 @@ export default function LibraryToolbar({
   library: Library;
   onChange: Dispatch<SetStateAction<Library>>;
 }) {
+  const { t } = useTranslation();
   const [options, setOptions] = useState(false);
   const [chooser, setChooser] = useState(false);
-  const [importMessage, setImportMessage] = useState("");
+  const [importMessage, setImportMessage] = useState<Message | null>(null);
   const changeChooser = useCallback((open: boolean) => {
     setChooser(open);
     if (open) setOptions(false);
   }, []);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [name, setName] = useState("");
-  const [nameError, setNameError] = useState("");
-  const [error, setError] = useState("");
+  const [nameError, setNameError] = useState<Message | null>(null);
+  const [error, setError] = useState<Message | null>(null);
   const [reading, setReading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -132,9 +143,17 @@ export default function LibraryToolbar({
         action.type === "load"
           ? loadTimeline(state, action.id)
           : action.type === "new"
-            ? newTimeline(state)
+            ? newTimeline(state, t("untitledTimeline"))
             : action.type === "duplicate"
-              ? duplicateTimeline(state)
+              ? duplicateTimeline(
+                  state,
+                  t("copyName", {
+                    name:
+                      state.timelines.find(
+                        (entry) => entry.id === state.draft.sourceId,
+                      )?.name || t("untitledTimeline"),
+                  }),
+                )
               : {
                   ...state,
                   draft: {
@@ -146,25 +165,27 @@ export default function LibraryToolbar({
       setModal(null);
     } catch (e) {
       setModal(null);
-      setError((e as Error).message);
+      setError(errorMessage(e));
     }
   }
   function request(action: Action) {
     setOptions(false);
     setChooser(false);
-    setError("");
-    setImportMessage("");
+    setError(null);
+    setImportMessage(null);
     if (isDirty(latest.current)) setModal({ type: "unsaved", action });
     else execute(action);
   }
   function openSaveAs() {
     setOptions(false);
     setChooser(false);
-    setImportMessage("");
-    setNameError("");
+    setImportMessage(null);
+    setNameError(null);
     setName(
       uniqueName(
-        `${latest.current.draft.name.trim() || "Untitled timeline"} copy`,
+        t("copyName", {
+          name: latest.current.draft.name.trim() || t("untitledTimeline"),
+        }),
         latest.current.timelines,
       ),
     );
@@ -178,31 +199,29 @@ export default function LibraryToolbar({
       else setModal(null);
     } catch (e) {
       setModal(null);
-      setError((e as Error).message);
+      setError(errorMessage(e));
     }
   }
   async function readFile(file?: File) {
     if (!file) return;
     setOptions(false);
-    setError("");
-    setImportMessage("");
+    setError(null);
+    setImportMessage(null);
     setReading(true);
     try {
       if (file.size > MAX_LIBRARY_IMPORT_BYTES)
-        throw Error("Choose a library file smaller than 10 MB.");
+        throw new AppError("libraryFileSize");
       const text = await file.text();
       const result = readTimelineFile(text, latest.current.timelines);
       if (result.kind === "library") {
         onChange((old) => mergeTimelines(old, result.timelines));
         const count = result.timelines.length;
         setImportMessage(
-          count
-            ? `Imported ${count} ${count === 1 ? "timeline" : "timelines"}.`
-            : "No timelines to import.",
+          count ? message("imported", { count }) : message("nothingToImport"),
         );
       } else request({ type: "import", draft: result.draft });
     } catch (e) {
-      setError((e as Error).message || "Could not read this file.");
+      setError(errorMessage(e, "fileReadFailure"));
     } finally {
       setReading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -216,7 +235,7 @@ export default function LibraryToolbar({
           [
             all
               ? exportTimelines(latest.current.timelines)
-              : exportTimeline(latest.current.draft),
+              : exportTimeline(latest.current.draft, t("untitledTimeline")),
           ],
           {
             type: "application/json",
@@ -238,21 +257,21 @@ export default function LibraryToolbar({
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
-      setError("Could not export this timeline. Try again.");
+      setError(message("exportFailure"));
     }
   }
   return (
-    <section className="library-toolbar" aria-label="Timeline library">
+    <section className="library-toolbar" aria-label={t("library")}>
       <div className="library-row">
         <div className="timeline-title-group">
-          <h2 aria-label="Timeline" className="timeline-title">
+          <h2 aria-label={t("timeline")} className="timeline-title">
             <span aria-hidden="true" className="timeline-name-size">
-              {library.draft.name || "Untitled timeline"}
+              {library.draft.name || t("untitledTimeline")}
             </span>
             <input
               className="name-input timeline-name"
-              aria-label="Timeline name"
-              placeholder="Untitled timeline"
+              aria-label={t("timelineName")}
+              placeholder={t("untitledTimeline")}
               value={library.draft.name}
               onChange={(event) =>
                 onChange((old) => renameDraft(old, event.target.value))
@@ -277,7 +296,7 @@ export default function LibraryToolbar({
         <div className="library-buttons">
           {(reading || dirty) && (
             <p className="draft-status" role="status">
-              {reading ? "Reading timeline…" : "Unsaved changes"}
+              {t(reading ? "reading" : "unsaved")}
             </p>
           )}
           <button
@@ -287,24 +306,24 @@ export default function LibraryToolbar({
               reading || !library.draft.name.trim() || (!!source && !dirty)
             }
           >
-            <Save size={16} /> Save
+            <Save size={16} /> {t("save")}
           </button>
           <button
             className="library-secondary"
             onClick={openSaveAs}
             disabled={reading}
           >
-            Save as new
+            {t("saveAsNew")}
           </button>
           <div className="library-menu-wrap" ref={menuRef}>
             <button
               className="icon-button library-more"
-              aria-label="Timeline options"
+              aria-label={t("timelineOptions")}
               aria-expanded={options}
               onClick={() => {
                 setChooser(false);
                 setOptions(!options);
-                setImportMessage("");
+                setImportMessage(null);
               }}
               disabled={reading}
             >
@@ -313,29 +332,45 @@ export default function LibraryToolbar({
             {options && (
               <div className="library-options">
                 <button
+                  disabled={!source || !dirty}
+                  onClick={() => {
+                    if (!source || !dirty) return;
+                    setOptions(false);
+                    setError(null);
+                    setImportMessage(null);
+                    setModal({
+                      type: "discard",
+                      id: source.id,
+                      name: source.name,
+                    });
+                  }}
+                >
+                  <RotateCcw size={15} /> {t("discardOption")}
+                </button>
+                <button
                   onClick={() => request({ type: "duplicate" })}
                   disabled={!source}
                 >
-                  <Copy size={15} /> Duplicate
+                  <Copy size={15} /> {t("duplicate")}
                 </button>
                 <button onClick={() => fileRef.current?.click()}>
-                  <Upload size={15} /> Import…
+                  <Upload size={15} /> {t("import")}
                 </button>
                 <button onClick={() => download()}>
-                  <Download size={15} /> Export
+                  <Download size={15} /> {t("export")}
                 </button>
                 <button
                   onClick={() => download(true)}
                   disabled={!library.timelines.length}
                 >
-                  <Download size={15} /> Export all timelines
+                  <Download size={15} /> {t("exportAll")}
                 </button>
                 <button
                   className="delete"
                   onClick={() => request({ type: "delete" })}
                   disabled={!source}
                 >
-                  <Trash2 size={15} /> Delete
+                  <Trash2 size={15} /> {t("delete")}
                 </button>
               </div>
             )}
@@ -344,18 +379,18 @@ export default function LibraryToolbar({
       </div>
       {!library.draft.name.trim() && (
         <p className="field-error" id="draft-name-error">
-          Enter a timeline name before saving.
+          {t("nameBeforeSave")}
         </p>
       )}
       {importMessage && (
         <p className="import-status" role="status">
-          {importMessage}
+          {translateMessage(importMessage, t)}
         </p>
       )}
       {error && (
         <div className="library-error" role="alert">
-          {error}
-          <button onClick={() => setError("")}>Dismiss</button>
+          {translateMessage(error, t)}
+          <button onClick={() => setError(null)}>{t("dismiss")}</button>
         </div>
       )}
       <input
@@ -363,30 +398,59 @@ export default function LibraryToolbar({
         type="file"
         accept=".json,application/json"
         hidden
-        aria-label="Import timeline file"
+        aria-label={t("importFile")}
         onChange={(event) => void readFile(event.target.files?.[0])}
       />
       {modal && (
         <Modal onCancel={() => setModal(null)}>
+          {modal.type === "discard" && (
+            <>
+              <h2 id="library-dialog-title">{t("discardTitle")}</h2>
+              <p>{t("discardConfirmation", { name: modal.name })}</p>
+              <div className="dialog-actions">
+                <button
+                  className="library-secondary"
+                  autoFocus
+                  onClick={() => setModal(null)}
+                >
+                  {t("cancel")}
+                </button>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    try {
+                      onChange(loadTimeline(latest.current, modal.id));
+                      setModal(null);
+                    } catch (e) {
+                      setModal(null);
+                      setError(errorMessage(e));
+                    }
+                  }}
+                >
+                  {t("discard")}
+                </button>
+              </div>
+            </>
+          )}
           {modal.type === "unsaved" && (
             <>
-              <h2 id="library-dialog-title">Unsaved changes</h2>
-              <p>Save changes to “{library.draft.name}” before continuing?</p>
+              <h2 id="library-dialog-title">{t("unsaved")}</h2>
+              <p>{t("saveBeforeContinue", { name: library.draft.name })}</p>
               <div className="dialog-actions">
                 <button
                   className="library-secondary"
                   onClick={() => setModal(null)}
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
                 <button
                   className="library-secondary"
                   onClick={() => execute(modal.action)}
                 >
-                  Discard changes
+                  {t("discard")}
                 </button>
                 <button className="primary" onClick={() => save(modal.action)}>
-                  Save
+                  {t("save")}
                 </button>
               </div>
             </>
@@ -400,20 +464,20 @@ export default function LibraryToolbar({
                   onChange(next);
                   setModal(null);
                 } catch (e) {
-                  setNameError((e as Error).message);
+                  setNameError(errorMessage(e));
                 }
               }}
             >
-              <h2 id="library-dialog-title">Save as new timeline</h2>
+              <h2 id="library-dialog-title">{t("saveAsTitle")}</h2>
               <label className="dialog-name">
-                Name
+                {t("name")}
                 <input
                   value={name}
                   autoFocus
                   required
                   onChange={(event) => {
                     setName(event.target.value);
-                    setNameError("");
+                    setNameError(null);
                   }}
                   aria-invalid={!!nameError}
                   aria-describedby={
@@ -427,7 +491,7 @@ export default function LibraryToolbar({
                   className="field-error"
                   role="alert"
                 >
-                  {nameError}
+                  {translateMessage(nameError, t)}
                 </p>
               )}
               <div className="dialog-actions">
@@ -436,36 +500,39 @@ export default function LibraryToolbar({
                   className="library-secondary"
                   onClick={() => setModal(null)}
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
                 <button type="submit" className="primary">
-                  Save
+                  {t("save")}
                 </button>
               </div>
             </form>
           )}
           {modal.type === "delete" && (
             <>
-              <h2 id="library-dialog-title">Delete timeline?</h2>
-              <p>
-                Delete “{modal.name}” from your saved timelines? This cannot be
-                undone.
-              </p>
+              <h2 id="library-dialog-title">{t("deleteTitle")}</h2>
+              <p>{t("deleteConfirmation", { name: modal.name })}</p>
               <div className="dialog-actions">
                 <button
                   className="library-secondary"
                   onClick={() => setModal(null)}
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
                 <button
                   className="library-danger"
                   onClick={() => {
-                    onChange(deleteTimeline(latest.current, modal.id));
+                    onChange(
+                      deleteTimeline(
+                        latest.current,
+                        modal.id,
+                        t("untitledTimeline"),
+                      ),
+                    );
                     setModal(null);
                   }}
                 >
-                  Delete
+                  {t("delete")}
                 </button>
               </div>
             </>

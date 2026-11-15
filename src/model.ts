@@ -1,3 +1,6 @@
+import { AppError, message, type Message } from "./messages";
+import { englishNames, type DefaultNames } from "./defaultNames";
+import en from "./locales/en.json";
 export type Interval = {
   id: string;
   kind: "interval";
@@ -21,7 +24,7 @@ export type Step = Interval & {
 export const validRepeats = (value: number) =>
   Number.isInteger(value) && value >= 1 && value <= 99;
 export const uid = () => crypto.randomUUID();
-export const interval = (name = "New interval", seconds = 30): Interval => ({
+export const interval = (name = en.newInterval, seconds = 30): Interval => ({
   id: uid(),
   kind: "interval",
   name,
@@ -60,13 +63,16 @@ export const valid = (blocks: Block[]) =>
         b.intervals.length > 0 &&
         b.intervals.every((i) => Number.isInteger(i.seconds) && i.seconds > 0),
   );
-export function duplicate(b: Block): Block {
+export function duplicate(
+  b: Block,
+  name = en.copyName.replace("{{name}}", b.name),
+): Block {
   return b.kind === "interval"
-    ? { ...b, id: uid(), name: `${b.name} copy` }
+    ? { ...b, id: uid(), name }
     : {
         ...b,
         id: uid(),
-        name: `${b.name} copy`,
+        name,
         intervals: b.intervals.map((i) => ({ ...i, id: uid() })),
       };
 }
@@ -118,34 +124,36 @@ export function moveItem(
     return { ...b, intervals };
   });
 }
-export const starter = (): Block[] => [
-  interval("Warm up", 60),
+export const starter = (names: DefaultNames = englishNames): Block[] => [
+  interval(names.preparation, 60),
   {
     id: uid(),
     kind: "series",
-    name: "Strength & recovery",
+    name: names.mainSequence,
     intervals: [
-      interval("Work", 40),
-      interval("Rest", 20),
-      interval("Work", 40),
-      interval("Rest", 20),
+      interval(names.step1, 40),
+      interval(names.breakName, 20),
+      interval(names.step2, 40),
+      interval(names.breakName, 20),
     ],
   },
-  interval("Cool down", 60),
+  interval(names.finish, 60),
 ];
 export const STORAGE_KEY = "tempo.routine.v1";
-export function loadRoutine(): { blocks: Block[]; error?: string } {
+export function loadRoutine(names: DefaultNames = englishNames): {
+  blocks: Block[];
+  error?: Message;
+} {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { blocks: starter() };
+    if (!raw) return { blocks: starter(names) };
     const data = JSON.parse(raw);
     if (data.version !== 1) throw Error();
     return { blocks: parseBlocks(data.blocks) };
   } catch {
     return {
       blocks: [],
-      error:
-        "Your saved routine could not be loaded. You can build a new one below.",
+      error: message("loadRoutineFailure"),
     };
   }
 }
@@ -153,11 +161,10 @@ export function loadRoutine(): { blocks: Block[]; error?: string } {
 // Shared validation for browser storage and imported files. Rebuild objects so
 // only supported fields become part of the editable routine.
 export function parseBlocks(value: unknown): Block[] {
-  if (!Array.isArray(value)) throw Error("Invalid timeline intervals.");
+  if (!Array.isArray(value)) throw new AppError("invalidBlocks");
   const ids = new Set<string>();
   const base = (value: unknown): Record<string, unknown> => {
-    if (!value || typeof value !== "object")
-      throw Error("Invalid timeline item.");
+    if (!value || typeof value !== "object") throw new AppError("invalidItem");
     const item = value as Record<string, unknown>;
     if (
       typeof item.id !== "string" ||
@@ -165,7 +172,7 @@ export function parseBlocks(value: unknown): Block[] {
       ids.has(item.id) ||
       typeof item.name !== "string"
     )
-      throw Error("Invalid or duplicate timeline item.");
+      throw new AppError("duplicateItem");
     ids.add(item.id);
     return item;
   };
@@ -177,7 +184,7 @@ export function parseBlocks(value: unknown): Block[] {
       !Number.isSafeInteger(item.seconds) ||
       item.seconds < 0
     )
-      throw Error("Invalid interval duration.");
+      throw new AppError("invalidDuration");
     return {
       id: item.id as string,
       kind: "interval",
@@ -192,7 +199,7 @@ export function parseBlocks(value: unknown): Block[] {
       !Array.isArray(item.intervals) ||
       !validRepeats(item.repeats === undefined ? 1 : (item.repeats as number))
     )
-      throw Error("Invalid series rounds or intervals.");
+      throw new AppError("invalidRounds");
     return {
       id: item.id as string,
       kind: "series",
