@@ -283,7 +283,7 @@ describe("translated rendering", () => {
     expect(html).toContain(
       "En pausa. Intervalo 2 de 2: User interval, User series, ronda 2 de 2",
     );
-    expect(html).toContain("Ronda 2 de 2");
+    expect(html).toContain("User series · Ronda 2/2 · User interval · 00:05");
     expect(
       renderToStaticMarkup(
         <WorkoutTimeline

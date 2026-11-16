@@ -129,7 +129,8 @@ describe("timeline presentation", () => {
     expect(html).toContain(
       "Paused. Interval 4 of 6: Work, Strength, round 2 of 2",
     );
-    expect(html).toContain("Work · 00:30 · Strength · Round 2 of 2");
+    expect(html).toContain("Strength · Round 2/2 · Work · 00:30");
+    expect(html).toContain("Warm up · 00:10");
     expect(html).not.toContain("<button");
     expect(html).not.toContain("NaN");
   });
@@ -158,10 +159,10 @@ describe("timeline selection controls", () => {
     );
     expect(html.match(/<button /g)).toHaveLength(steps.length);
     expect(html).toContain(
-      'aria-label="Interval 2 of 6 · Go to Work · 00:30 · Strength · Round 1 of 2"',
+      'aria-label="Interval 2 of 6 · Go to Strength · Round 1/2 · Work · 00:30"',
     );
     expect(html).toContain(
-      'aria-label="Interval 4 of 6 · Go to Work · 00:30 · Strength · Round 2 of 2"',
+      'aria-label="Interval 4 of 6 · Go to Strength · Round 2/2 · Work · 00:30"',
     );
     expect(html.match(/aria-current="step"/g)).toHaveLength(1);
     expect(html).toContain("left:50%");

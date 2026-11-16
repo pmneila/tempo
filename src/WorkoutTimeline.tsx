@@ -38,7 +38,16 @@ export default function WorkoutTimeline({ steps, snapshot, onSelect }: Props) {
   const x = (fraction: number) => 4 + fraction * usable;
   const marker = x(position);
   const segmentTitle = (step: Step) =>
-    `${step.name || t("untitledInterval")} · ${format(step.seconds)}${step.seriesName ? ` · ${step.seriesName}` : ""}${step.rounds && step.rounds > 1 ? ` · ${t("roundPosition", { current: step.round, total: step.rounds })}` : ""}`;
+    [
+      step.seriesName,
+      step.rounds && step.rounds > 1
+        ? t("roundCompact", { current: step.round, total: step.rounds })
+        : null,
+      step.name || t("untitledInterval"),
+      format(step.seconds),
+    ]
+      .filter(Boolean)
+      .join(" · ");
   return (
     <div ref={ref} className="workout-timeline">
       <div
