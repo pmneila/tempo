@@ -74,6 +74,49 @@ export class TimerEngine {
     this.status = running ? "running" : "paused";
     this.deadline = this.clock() + this.remaining;
   }
+  seekBy(seconds: number) {
+    if (
+      !this.steps.length ||
+      this.status === "complete" ||
+      !Number.isFinite(seconds)
+    )
+      return;
+    const now = this.clock();
+    const total = this.steps.reduce(
+      (sum, step) => sum + step.seconds * 1000,
+      0,
+    );
+    const remaining =
+      this.status === "running" ? this.deadline - now : this.remaining;
+    const elapsed =
+      this.steps
+        .slice(0, this.index)
+        .reduce((sum, step) => sum + step.seconds * 1000, 0) +
+      this.steps[this.index].seconds * 1000 -
+      remaining;
+    const currentPosition = Math.max(0, Math.min(total, elapsed));
+    let position = Math.max(
+      0,
+      Math.min(total, currentPosition + seconds * 1000),
+    );
+    this.cancel();
+    this.fresh = false;
+    if (position === total) {
+      this.index = this.steps.length - 1;
+      this.remaining = 0;
+      this.deadline = now;
+      this.status = "complete";
+      return;
+    }
+    this.index = 0;
+    while (
+      this.index < this.steps.length - 1 &&
+      position >= this.steps[this.index].seconds * 1000
+    )
+      position -= this.steps[this.index++].seconds * 1000;
+    this.remaining = this.steps[this.index].seconds * 1000 - position;
+    this.deadline = now + this.remaining;
+  }
   previousTarget(scope: "interval" | "series") {
     if (this.status === "complete" || !this.steps.length) return -1;
     let index = this.index;

@@ -314,3 +314,197 @@ describe("back navigation", () => {
     expect(empty.previousTarget("series")).toBe(-1);
   });
 });
+
+describe("relative time seeking", () => {
+  const seekBlocks: Block[] = [
+    { id: "first", kind: "interval", name: "First", seconds: 20 },
+    {
+      id: "series",
+      kind: "series",
+      name: "Series",
+      repeats: 2,
+      intervals: [
+        { id: "long", kind: "interval", name: "Long", seconds: 7 },
+        { id: "short", kind: "interval", name: "Short", seconds: 3 },
+      ],
+    },
+    { id: "last", kind: "interval", name: "Last", seconds: 20 },
+  ];
+  function seeking() {
+    let now = 0;
+    const cue = vi.fn();
+    const cancel = vi.fn();
+    const engine = new TimerEngine(flatten(seekBlocks), () => now, cue, cancel);
+    return {
+      engine,
+      cue,
+      cancel,
+      clock: (value: number) => {
+        now = value;
+      },
+    };
+  }
+  it.each(["running", "paused"] as const)(
+    "preserves fractional time and %s state",
+    (status) => {
+      const { engine, clock, cancel } = seeking();
+      engine.resume();
+      clock(1234);
+      if (status === "paused") {
+        engine.pause();
+        clock(100000);
+      }
+      engine.seekBy(10);
+      expect(engine.snapshot()).toEqual({ index: 0, remaining: 8766, status });
+      engine.seekBy(-10);
+      expect(engine.snapshot()).toEqual({ index: 0, remaining: 18766, status });
+      expect(cancel).toHaveBeenCalledTimes(status === "paused" ? 3 : 2);
+    },
+  );
+  it("keeps the new deadline accurate through pause and resume", () => {
+    const { engine, clock } = seeking();
+    engine.resume();
+    clock(1234);
+    engine.seekBy(10);
+    clock(2000);
+    engine.pause();
+    expect(engine.remaining).toBe(8000);
+    clock(9000);
+    engine.resume();
+    clock(10000);
+    engine.tick();
+    expect(engine.remaining).toBe(7000);
+  });
+  it("selects the next occurrence at exact interval, round and series boundaries", () => {
+    const { engine } = seeking();
+    for (const [delta, index, remaining] of [
+      [20, 1, 7000],
+      [7, 2, 3000],
+      [3, 3, 7000],
+      [10, 5, 20000],
+      [-10, 3, 7000],
+      [-10, 1, 7000],
+      [-20, 0, 20000],
+    ]) {
+      engine.seekBy(delta);
+      expect(engine.snapshot()).toEqual({ index, remaining, status: "paused" });
+    }
+  });
+  it("crosses multiple short intervals in one jump and clamps at the beginning", () => {
+    const { engine } = seeking();
+    engine.seekBy(24);
+    engine.seekBy(10);
+    expect(engine.index).toBe(3);
+    expect(engine.steps[engine.index].round).toBe(2);
+    expect(engine.remaining).toBe(3000);
+    engine.seekBy(-10);
+    expect(engine.snapshot()).toEqual({
+      index: 1,
+      remaining: 3000,
+      status: "paused",
+    });
+    engine.seekBy(-100);
+    expect(engine.snapshot()).toEqual({
+      index: 0,
+      remaining: 20000,
+      status: "paused",
+    });
+    engine.seekBy(-10);
+    expect(engine.remaining).toBe(20000);
+  });
+  it.each(["running", "paused"] as const)(
+    "completes silently when seeking to the end while %s",
+    (status) => {
+      const { engine, clock, cue, cancel } = seeking();
+      if (status === "running") engine.resume();
+      engine.seekBy(50);
+      engine.seekBy(10);
+      expect(engine.snapshot()).toEqual({
+        index: 5,
+        remaining: 0,
+        status: "complete",
+      });
+      engine.seekBy(-10);
+      clock(100000);
+      engine.tick();
+      expect(engine.status).toBe("complete");
+      expect(cue).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledTimes(2);
+      engine.reset();
+      engine.resume();
+      expect(engine.snapshot()).toEqual({
+        index: 0,
+        remaining: 20000,
+        status: "running",
+      });
+    },
+  );
+  it("clamps overshoot at completion, including a single short interval", () => {
+    const engine = new TimerEngine([flatten(blocks)[2]]);
+    engine.seekBy(10);
+    expect(engine.snapshot()).toEqual({
+      index: 0,
+      remaining: 0,
+      status: "complete",
+    });
+  });
+  it("uses live elapsed time after delayed callbacks without replaying cues", () => {
+    const { engine, clock, cue } = seeking();
+    engine.resume();
+    clock(33000);
+    engine.seekBy(10);
+    expect(engine.snapshot()).toEqual({
+      index: 5,
+      remaining: 17000,
+      status: "running",
+    });
+    engine.seekBy(-10);
+    expect(engine.snapshot()).toEqual({
+      index: 3,
+      remaining: 4000,
+      status: "running",
+    });
+    expect(cue).not.toHaveBeenCalled();
+  });
+  it("does not replay landing-point cues but plays subsequent natural cues", () => {
+    const { engine, clock, cue, cancel } = seeking();
+    engine.resume();
+    engine.seekBy(17);
+    engine.tick();
+    expect(cue).not.toHaveBeenCalled();
+    for (const now of [1000, 2000, 3000]) {
+      clock(now);
+      engine.tick();
+    }
+    expect(cue.mock.calls).toEqual([[false], [false], [true]]);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(engine.index).toBe(1);
+  });
+  it("keeps backward navigation based on the new interval and series position", () => {
+    const { engine } = seeking();
+    engine.seekBy(34);
+    expect(engine.previousTarget("interval")).toBe(3);
+    expect(engine.previousTarget("series")).toBe(1);
+    engine.back("series");
+    expect(engine.remaining).toBe(7000);
+    engine.back("series");
+    expect(engine.index).toBe(0);
+  });
+  it("ignores empty timelines and non-finite offsets", () => {
+    const { engine, cancel } = seeking();
+    for (const delta of [NaN, Infinity, -Infinity]) engine.seekBy(delta);
+    expect(engine.snapshot()).toEqual({
+      index: 0,
+      remaining: 20000,
+      status: "paused",
+    });
+    expect(cancel).not.toHaveBeenCalled();
+    const empty = new TimerEngine([]);
+    empty.seekBy(10);
+    expect(empty.snapshot()).toEqual({
+      index: 0,
+      remaining: 0,
+      status: "paused",
+    });
+  });
+});

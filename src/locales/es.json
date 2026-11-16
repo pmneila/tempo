@@ -91,7 +91,6 @@
   "playAgain": "Volver a iniciar",
   "pause": "Pausar",
   "resume": "Continuar",
-  "reset": "Detener y reiniciar",
   "upNext": "A CONTINUACIÓN",
   "timelineOverview": "Vista general de la secuencia",
   "noIntervals": "Sin intervalos",
@@ -160,5 +159,11 @@
   "sortable": "ordenable",
   "intervalDescription": "Intervalo {{current}} de {{total}}: {{name}}",
   "timelineNavigation": "Navegación de la secuencia",
-  "jumpToInterval": "Ir a {{interval}}"
+  "jumpToInterval": "Ir a {{interval}}",
+  "timeControls": "Controles de tiempo",
+  "intervalControls": "Navegación entre intervalos y series",
+  "rewind10": "Retroceder 10 segundos",
+  "advance10": "Avanzar 10 segundos",
+  "rewind10Short": "−10 s",
+  "advance10Short": "+10 s"
 }

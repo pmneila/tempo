@@ -91,7 +91,6 @@
   "playAgain": "Play again",
   "pause": "Pause",
   "resume": "Resume",
-  "reset": "Stop & reset",
   "upNext": "UP NEXT",
   "timelineOverview": "Timeline overview",
   "noIntervals": "No intervals",
@@ -160,5 +159,11 @@
   "sortable": "sortable",
   "intervalDescription": "Interval {{current}} of {{total}}: {{name}}",
   "timelineNavigation": "Timeline navigation",
-  "jumpToInterval": "Go to {{interval}}"
+  "jumpToInterval": "Go to {{interval}}",
+  "timeControls": "Playback time controls",
+  "intervalControls": "Interval and series navigation",
+  "rewind10": "Rewind 10 seconds",
+  "advance10": "Advance 10 seconds",
+  "rewind10Short": "−10 s",
+  "advance10Short": "+10 s"
 }

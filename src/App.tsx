@@ -904,85 +904,116 @@ export default function App() {
               </span>
             </div>
             <div className="playback-controls">
-              <IconButton
-                label={t("previousSeries")}
-                disabled={
-                  completed ||
-                  (engine.current?.previousTarget("series") ?? -1) < 0
-                }
-                onClick={() => control((e) => e.back("series"))}
+              <div
+                className="playback-time-controls"
+                role="group"
+                aria-label={t("timeControls")}
               >
-                <SkipBack size={23} />
-                <span aria-hidden="true">{t("seriesLabel", { count: 1 })}</span>
-              </IconButton>
-              <IconButton
-                label={t("previousInterval")}
-                disabled={
-                  completed ||
-                  (engine.current?.previousTarget("interval") ?? -1) < 0
-                }
-                onClick={() => control((e) => e.back("interval"))}
+                <button
+                  type="button"
+                  className="time-jump"
+                  aria-label={t("rewind10")}
+                  title={t("rewind10")}
+                  disabled={completed || elapsed <= 0}
+                  onClick={() => control((e) => e.seekBy(-10))}
+                >
+                  {t("rewind10Short")}
+                </button>
+                <button
+                  className="primary play-pause"
+                  onClick={async () => {
+                    await audio();
+                    control((e) => {
+                      if (e.status === "complete") {
+                        e.reset();
+                        e.resume();
+                      } else if (e.status === "running") e.pause();
+                      else e.resume();
+                    });
+                  }}
+                >
+                  {completed ? (
+                    <RotateCcw size={24} />
+                  ) : snapshot.status === "running" ? (
+                    <Pause size={25} fill="currentColor" />
+                  ) : (
+                    <Play size={25} fill="currentColor" />
+                  )}
+                  <span>
+                    {completed
+                      ? t("playAgain")
+                      : snapshot.status === "running"
+                        ? t("pause")
+                        : t("resume")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="time-jump"
+                  aria-label={t("advance10")}
+                  title={t("advance10")}
+                  disabled={completed}
+                  onClick={() => control((e) => e.seekBy(10))}
+                >
+                  {t("advance10Short")}
+                </button>
+              </div>
+              <div
+                className="playback-navigation"
+                role="group"
+                aria-label={t("intervalControls")}
               >
-                <ArrowLeft size={24} />
-                <span aria-hidden="true">
-                  {t("intervalLabel", { count: 1 })}
-                </span>
-              </IconButton>
-              <button
-                className="primary play-pause"
-                onClick={async () => {
-                  await audio();
-                  control((e) => {
-                    if (e.status === "complete") {
-                      e.reset();
-                      e.resume();
-                    } else if (e.status === "running") e.pause();
-                    else e.resume();
-                  });
-                }}
-              >
-                {completed ? (
-                  <RotateCcw size={24} />
-                ) : snapshot.status === "running" ? (
-                  <Pause size={25} fill="currentColor" />
-                ) : (
-                  <Play size={25} fill="currentColor" />
-                )}
-                <span>
-                  {completed
-                    ? t("playAgain")
-                    : snapshot.status === "running"
-                      ? t("pause")
-                      : t("resume")}
-                </span>
-              </button>
-              <IconButton
-                label={t("nextInterval")}
-                disabled={completed || snapshot.index >= steps.length - 1}
-                onClick={() => control((e) => e.jump(e.index + 1))}
-              >
-                <ArrowRight size={24} />
-                <span aria-hidden="true">
-                  {t("intervalLabel", { count: 1 })}
-                </span>
-              </IconButton>
-              <IconButton
-                label={t("nextSeries")}
-                disabled={
-                  completed || (engine.current?.seriesTarget(1) ?? -1) < 0
-                }
-                onClick={() => control((e) => e.jump(e.seriesTarget(1)))}
-              >
-                <SkipForward size={23} />
-                <span aria-hidden="true">{t("seriesLabel", { count: 1 })}</span>
-              </IconButton>
+                <IconButton
+                  label={t("previousSeries")}
+                  disabled={
+                    completed ||
+                    (engine.current?.previousTarget("series") ?? -1) < 0
+                  }
+                  onClick={() => control((e) => e.back("series"))}
+                >
+                  <SkipBack size={23} />
+                  <span aria-hidden="true">
+                    {t("seriesLabel", { count: 1 })}
+                  </span>
+                </IconButton>
+                <IconButton
+                  label={t("previousInterval")}
+                  disabled={
+                    completed ||
+                    (engine.current?.previousTarget("interval") ?? -1) < 0
+                  }
+                  onClick={() => control((e) => e.back("interval"))}
+                >
+                  <ArrowLeft size={24} />
+                  <span aria-hidden="true">
+                    {t("intervalLabel", { count: 1 })}
+                  </span>
+                </IconButton>
+
+                <IconButton
+                  label={t("nextInterval")}
+                  disabled={completed || snapshot.index >= steps.length - 1}
+                  onClick={() => control((e) => e.jump(e.index + 1))}
+                >
+                  <ArrowRight size={24} />
+                  <span aria-hidden="true">
+                    {t("intervalLabel", { count: 1 })}
+                  </span>
+                </IconButton>
+                <IconButton
+                  label={t("nextSeries")}
+                  disabled={
+                    completed || (engine.current?.seriesTarget(1) ?? -1) < 0
+                  }
+                  onClick={() => control((e) => e.jump(e.seriesTarget(1)))}
+                >
+                  <SkipForward size={23} />
+                  <span aria-hidden="true">
+                    {t("seriesLabel", { count: 1 })}
+                  </span>
+                </IconButton>
+              </div>
             </div>
-            <button
-              className="text-button reset-button"
-              onClick={() => control((e) => e.reset())}
-            >
-              <RotateCcw size={15} /> {t("reset")}
-            </button>
           </div>
           <div className="up-next">
             <span className="eyebrow">

@@ -197,3 +197,18 @@ describe("timeline selection controls", () => {
     expect(one).toContain("left:0%;width:100%");
   });
 });
+
+describe("timeline time adjustments", () => {
+  it("updates proportional progress and repeated occurrence after seeking both ways", () => {
+    const engine = new TimerEngine(steps);
+    engine.seekBy(50);
+    expect(engine.index).toBe(3);
+    expect(engine.steps[engine.index].round).toBe(2);
+    expect(timelinePosition(layout.segments, engine.snapshot())).toBe(0.5);
+    engine.seekBy(-10);
+    expect(engine.index).toBe(2);
+    expect(timelinePosition(layout.segments, engine.snapshot())).toBe(0.4);
+    engine.seekBy(100);
+    expect(timelinePosition(layout.segments, engine.snapshot())).toBe(1);
+  });
+});
